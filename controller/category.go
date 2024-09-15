@@ -2,13 +2,18 @@ package controller
 
 import (
 	"coba-konteks/app"
+	"coba-konteks/helper"
 	"context"
 	"fmt"
+	"io"
+	"log"
 	"net/http"
+	"runtime"
+	"strconv"
 	"sync"
-	"time"
 
 	"github.com/julienschmidt/httprouter"
+	"github.com/xuri/excelize/v2"
 )
 
 var (
@@ -16,6 +21,47 @@ var (
 	bulkInsertCancel context.CancelFunc
 	mu               sync.Mutex
 )
+
+// func readExcel(filename string) [][]string {
+func readExcel(filename string) [][]string {
+	// f, err := excelize.OpenFile("asset/20.xlsx")
+	// f, err := excelize.OpenFile("asset/500.xlsx")
+	// f, err := excelize.OpenFile("asset/1000.xlsx")
+
+	f, err := excelize.OpenFile("asset/" + filename + ".xlsx")
+
+	if err != nil {
+		log.Fatalf("Error opening file: %v", err)
+	}
+
+	// Get all sheet names
+	sheetNames := f.GetSheetList()
+	fmt.Println("Sheets in the file:")
+	for _, name := range sheetNames {
+		fmt.Println(name)
+	}
+
+	// Read data from a specific sheet
+	sheetName := sheetNames[0] // Assuming you want the first sheet
+	rows, err := f.GetRows(sheetName)
+	if err != nil {
+		log.Fatalf("Error reading rows: %v", err)
+		helper.PanicIfError(err)
+	}
+
+	//tampilkan excel
+	// for _, row := range rows {
+	// 	for _, cell := range row {
+	// 		fmt.Printf("%s\t", cell)
+	// 	}
+	// 	fmt.Println()
+	// }
+
+	return rows
+
+}
+
+var numGoroutine int
 
 func BulkInsertHandler(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 	mu.Lock()
@@ -31,28 +77,21 @@ func BulkInsertHandler(w http.ResponseWriter, r *http.Request, _ httprouter.Para
 	var cancelCtx context.Context
 	cancelCtx, bulkInsertCancel = context.WithCancel(context.Background())
 
+	// Membaca body dari request
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, "Unable to read request body", http.StatusInternalServerError)
+		return
+	}
+	defer r.Body.Close() // Pastikan untuk menutup body setelah selesai
+
+	fmt.Println(string(body))
+
+	data := readExcel(string(body))
+
+	// chanNumGoroutine := make(channel)
+
 	go func(ctx context.Context) {
-		data := []struct {
-			Field1 string
-			Field2 string
-		}{
-			{"Value1", "Value2"},
-			{"Value2", "Value4"},
-			{"Value3", "Value4"},
-			{"Value3", "Value4"},
-			{"Value4", "Value4"},
-			{"Value6", "Value4"},
-			{"Value7", "Value4"},
-			{"Value8", "Value4"},
-			{"Value9", "Value4"},
-			{"Value10", "Value4"},
-			{"Value11", "Value4"},
-			{"Value12", "Value4"},
-			{"Value13", "Value4"},
-			{"Value14", "Value4"},
-			{"Value15", "Value4"},
-			// Add more data if needed
-		}
 
 		tx, err := db.BeginTx(ctx, nil)
 		if err != nil {
@@ -75,16 +114,16 @@ func BulkInsertHandler(w http.ResponseWriter, r *http.Request, _ httprouter.Para
 				http.Error(w, "Bulk insert cancelled", http.StatusRequestTimeout)
 				return
 			default:
-				_, err := stmt.ExecContext(ctx, row.Field1)
+				_, err := stmt.ExecContext(ctx, row[0])
 				if err != nil {
 					tx.Rollback()
 					http.Error(w, "Failed to execute statement", http.StatusInternalServerError)
 					return
 				}
-				fmt.Println("insert data", row.Field1)
+				fmt.Println("insert data", row[0], "Go Num :", strconv.Itoa(runtime.NumGoroutine()))
 			}
 
-			time.Sleep(500 * time.Millisecond)
+			// time.Sleep(500 * time.Millisecond)
 		}
 
 		err = tx.Commit()
@@ -94,12 +133,18 @@ func BulkInsertHandler(w http.ResponseWriter, r *http.Request, _ httprouter.Para
 			return
 		}
 
+		// numGoroutine = runtime.NumGoroutine()
+		// fmt.Println("num goroutine :", strconv.Itoa(runtime.NumGoroutine()))
+
 		bulkInsertCancel()
 		bulkInsertCancel = nil
 
-		http.Error(w, "Bulk insert successful", http.StatusOK)
+		// http.Error(w, "Bulk insert successful", http.StatusOK)
 
 	}(cancelCtx)
+
+	fmt.Println("selesai")
+
 }
 
 func CancelBulkInsertHandler(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {

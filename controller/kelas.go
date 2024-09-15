@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"runtime"
 	"strconv"
+	"sync"
 
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/julienschmidt/httprouter"
@@ -86,6 +87,8 @@ import (
 
 // }
 
+var mtx sync.Mutex
+
 func NumGoroutine(w http.ResponseWriter, r *http.Request, params httprouter.Params) {
 
 	startGoroutine := runtime.NumGoroutine()
@@ -93,7 +96,9 @@ func NumGoroutine(w http.ResponseWriter, r *http.Request, params httprouter.Para
 
 	for i := 0; i < 10000; i++ {
 		go func() {
-			_ = runtime.NumGoroutine()
+			defer mtx.Unlock()
+			mtx.Lock()
+			_ = 2 + 9
 		}()
 	}
 

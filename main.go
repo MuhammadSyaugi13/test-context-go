@@ -17,7 +17,7 @@ func main() {
 
 	router.GET("/api/jumlah-goroutine", controller.NumGoroutine)
 
-	router.GET("/api/bulk-insert", controller.BulkInsertHandler)
+	router.POST("/api/bulk-insert", controller.BulkInsertHandler)
 	router.GET("/api/cancel-bulk-insert", controller.CancelBulkInsertHandler)
 
 	// router.PanicHandler = exception.ErrorHandler
